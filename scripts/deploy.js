@@ -1,46 +1,58 @@
-// scripts/deploy.js
-const { ethers } = require("hardhat");
+// This is a script for deploying your contracts. You can adapt it to deploy
+// yours, or create new ones.
+
+const path = require("path");
 
 async function main() {
-  console.log("Deploying CarRental contract...");
+  // This is just a convenience check
+  if (network.name === "hardhat") {
+    console.warn(
+      "You are trying to deploy a contract to the Hardhat Network, which" +
+        "gets automatically created and destroyed every time. Use the Hardhat" +
+        " option '--network localhost'"
+    );
+  }
 
-  // Get the contract factory
-  const CarRental = await ethers.getContractFactory("CarRental");
+  // ethers is available in the global scope
+  const [deployer] = await ethers.getSigners();
+  console.log(
+    "Deploying the contracts with the account:",
+    await deployer.getAddress()
+  );
 
-  // Deploy the contract
-  const carRental = await CarRental.deploy();
-  
-  // Wait for deployment to finish
-  await carRental.deployed();
+  console.log("Account balance:", (await deployer.getBalance()).toString());
 
-  console.log("CarRental deployed to:", carRental.address);
+  const Token = await ethers.getContractFactory("Token");
+  const token = await Token.deploy();
+  await token.deployed();
 
-  // Save the contract address to be used by frontend
-  saveContractData(carRental);
+  console.log("Token address:", token.address);
+
+  // We also save the contract's artifacts and address in the frontend directory
+  saveFrontendFiles(token);
 }
 
-function saveContractData(contract) {
+function saveFrontendFiles(token) {
   const fs = require("fs");
-  const contractsDir = __dirname + "/../frontend/src/contracts";
+  const contractsDir = path.join(__dirname, "..", "frontend", "src", "contracts");
 
   if (!fs.existsSync(contractsDir)) {
-    fs.mkdirSync(contractsDir, { recursive: true });
+    fs.mkdirSync(contractsDir);
   }
 
   fs.writeFileSync(
-    contractsDir + "/contract-address.json",
-    JSON.stringify({ CarRental: contract.address }, undefined, 2)
+    path.join(contractsDir, "contract-address.json"),
+    JSON.stringify({ Token: token.address }, undefined, 2)
   );
 
-  const CarRentalArtifact = artifacts.readArtifactSync("CarRental");
-  
+  const TokenArtifact = artifacts.readArtifactSync("Token");
+
   fs.writeFileSync(
-    contractsDir + "/CarRental.json",
-    JSON.stringify(CarRentalArtifact, null, 2)
+    path.join(contractsDir, "Token.json"),
+    JSON.stringify(TokenArtifact, null, 2)
   );
 }
 
-// Run the deployment
 main()
   .then(() => process.exit(0))
   .catch((error) => {

@@ -1,45 +1,32 @@
 {
-  "name": "talrental",
+  "name": "hardhat-boilerplate",
   "version": "1.0.0",
-  "main": "index.js",
-  "directories": {
-    "test": "test"
-  },
+  "description": "A boilerplate repository to get you started with Hardhat and Ethereum development",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "hardhat test"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LouisSetyandaru/TalRental.git"
+    "url": "git+https://github.com/NomicFoundation/hardhat-boilerplate.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Nomic Foundation",
+  "license": "MIT",
   "bugs": {
-    "url": "https://github.com/LouisSetyandaru/TalRental/issues"
+    "url": "https://github.com/NomicFoundation/hardhat-boilerplate/issues"
   },
-  "homepage": "https://github.com/LouisSetyandaru/TalRental#readme",
-  "description": "",
+  "homepage": "https://github.com/NomicFoundation/hardhat-boilerplate#readme",
   "devDependencies": {
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "@nomiclabs/hardhat-waffle": "^2.0.6",
-    "@openzeppelin/contracts": "^5.3.0",
-    "chai": "^5.2.0",
-    "dotenv": "^16.5.0",
-    "ethereum-waffle": "^4.0.10",
-    "ethers": "^5.8.0",
-    "hardhat": "^2.24.0"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
-    "@mui/icons-material": "^7.1.0",
-    "@mui/material": "^7.1.0",
-    "axios": "^1.9.0",
-    "body-parser": "^2.2.0",
-    "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "mongoose": "^8.15.0",
-    "web3modal": "^1.9.12"
+    "@ethersproject/abi": "^5.7.0",
+    "@ethersproject/providers": "^5.7.2",
+    "@nomicfoundation/hardhat-chai-matchers": "^1.0.5",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.7",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
+    "@nomiclabs/hardhat-ethers": "^2.2.1",
+    "@nomiclabs/hardhat-etherscan": "^3.1.4",
+    "chai": "^4.3.7",
+    "ethers": "^5.7.2",
+    "hardhat": "^2.12.5",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solidity-coverage": "^0.8.2"
   }
 }
