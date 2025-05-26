@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract CarRental {
+contract DecentraRent {
     struct Car {
         uint id;
         address payable owner;
@@ -22,11 +22,36 @@ contract CarRental {
     mapping(uint => Car) public cars;
     mapping(uint => Rental) public rentals;
 
-    event CarListed(uint indexed carId, address indexed owner, uint pricePerDay, uint depositAmount, string metadataURI);
-    event RateAndDepositSet(uint indexed carId, uint pricePerDay, uint depositAmount);
-    event CarBooked(uint indexed carId, address indexed renter, uint startTime, uint endTime, uint paidAmount);
-    event BookingCancelled(uint indexed carId, address indexed renter, uint refundAmount);
-    event RentalCompleted(uint indexed carId, address indexed renter, uint ownerPayout, uint renterRefund);
+    event CarListed(
+        uint indexed carId,
+        address indexed owner,
+        uint pricePerDay,
+        uint depositAmount,
+        string metadataURI
+    );
+    event RateAndDepositSet(
+        uint indexed carId,
+        uint pricePerDay,
+        uint depositAmount
+    );
+    event CarBooked(
+        uint indexed carId,
+        address indexed renter,
+        uint startTime,
+        uint endTime,
+        uint paidAmount
+    );
+    event BookingCancelled(
+        uint indexed carId,
+        address indexed renter,
+        uint refundAmount
+    );
+    event RentalCompleted(
+        uint indexed carId,
+        address indexed renter,
+        uint ownerPayout,
+        uint renterRefund
+    );
 
     modifier onlyCarOwner(uint carId) {
         require(cars[carId].owner == msg.sender, "Not car owner");
@@ -39,7 +64,10 @@ contract CarRental {
     }
 
     modifier onlyBeforeStart(uint carId) {
-        require(block.timestamp < rentals[carId].startTime, "Too late to cancel");
+        require(
+            block.timestamp < rentals[carId].startTime,
+            "Too late to cancel"
+        );
         _;
     }
 
@@ -48,28 +76,45 @@ contract CarRental {
         _;
     }
 
-    function listCar(uint pricePerDay, uint depositAmount, string calldata metadataURI) external {
+    function listCar(
+        uint pricePerDay,
+        uint depositAmount,
+        string calldata metadataURI
+    ) external {
         carCount++;
-        cars[carCount] = Car({
-            id: carCount,
-            owner: payable(msg.sender),
-            pricePerDay: pricePerDay,
-            depositAmount: depositAmount,
-            isAvailable: true,
-            metadataURI: metadataURI
-        });
-        emit CarListed(carCount, msg.sender, pricePerDay, depositAmount, metadataURI);
+        cars[carCount] = Car(
+            carCount,
+            payable(msg.sender),
+            pricePerDay,
+            depositAmount,
+            true,
+            metadataURI
+        );
+        emit CarListed(
+            carCount,
+            msg.sender,
+            pricePerDay,
+            depositAmount,
+            metadataURI
+        );
     }
 
-    function setRateAndDeposit(uint carId, uint newPricePerDay, uint newDepositAmount) external onlyCarOwner(carId) carExists(carId) {
-        Car storage car = cars[carId];
-        require(car.isAvailable, "Cannot change once booked");
-        car.pricePerDay = newPricePerDay;
-        car.depositAmount = newDepositAmount;
+    function setRateAndDeposit(
+        uint carId,
+        uint newPricePerDay,
+        uint newDepositAmount
+    ) external onlyCarOwner(carId) carExists(carId) {
+        require(cars[carId].isAvailable, "Cannot change once booked");
+        cars[carId].pricePerDay = newPricePerDay;
+        cars[carId].depositAmount = newDepositAmount;
         emit RateAndDepositSet(carId, newPricePerDay, newDepositAmount);
     }
 
-    function bookCar(uint carId, uint startTime, uint endTime) external payable carExists(carId) {
+    function bookCar(
+        uint carId,
+        uint startTime,
+        uint endTime
+    ) external payable carExists(carId) {
         Car storage car = cars[carId];
         require(car.isAvailable, "Car unavailable");
         require(endTime > startTime, "Invalid period");
@@ -78,27 +123,25 @@ contract CarRental {
         require(msg.value == totalCost, "Incorrect payment");
 
         car.isAvailable = false;
-        rentals[carId] = Rental({
-            renter: msg.sender,
-            startTime: startTime,
-            endTime: endTime,
-            isActive: true
-        });
+        rentals[carId] = Rental(msg.sender, startTime, endTime, true);
+
         emit CarBooked(carId, msg.sender, startTime, endTime, msg.value);
     }
 
-    function cancelBooking(uint carId) external carExists(carId) onlyRenter(carId) onlyBeforeStart(carId) {
+    function cancelBooking(
+        uint carId
+    ) external carExists(carId) onlyRenter(carId) onlyBeforeStart(carId) {
         Rental storage rent = rentals[carId];
         require(rent.isActive, "No active booking");
-        uint timeUntilStart = rent.startTime - block.timestamp;
-        uint refundAmount;
 
-        if (timeUntilStart >= 48 hours) {
-            refundAmount = (rent.endTime - rent.startTime) / 1 days * cars[carId].pricePerDay + cars[carId].depositAmount;
-        } else {
-            uint fullAmount = (rent.endTime - rent.startTime) / 1 days * cars[carId].pricePerDay + cars[carId].depositAmount;
-            refundAmount = fullAmount / 2;
-        }
+        uint timeUntilStart = rent.startTime - block.timestamp;
+        uint rentalDays = (rent.endTime - rent.startTime) / 1 days;
+        uint totalAmount = rentalDays *
+            cars[carId].pricePerDay +
+            cars[carId].depositAmount;
+        uint refundAmount = timeUntilStart >= 48 hours
+            ? totalAmount
+            : totalAmount / 2;
 
         rent.isActive = false;
         cars[carId].isAvailable = true;
@@ -106,13 +149,15 @@ contract CarRental {
         emit BookingCancelled(carId, rent.renter, refundAmount);
     }
 
-    function completeRental(uint carId) external carExists(carId) onlyRenter(carId) {
+    function completeRental(
+        uint carId
+    ) external carExists(carId) onlyRenter(carId) {
         Rental storage rent = rentals[carId];
         require(rent.isActive, "Not active");
         require(block.timestamp >= rent.endTime, "Too early");
 
-        uint daysRented = (rent.endTime - rent.startTime) / 1 days;
-        uint rentalFee = daysRented * cars[carId].pricePerDay;
+        uint rentalFee = ((rent.endTime - rent.startTime) / 1 days) *
+            cars[carId].pricePerDay;
         uint deposit = cars[carId].depositAmount;
 
         rent.isActive = false;
@@ -120,17 +165,19 @@ contract CarRental {
 
         cars[carId].owner.transfer(rentalFee);
         payable(rent.renter).transfer(deposit);
+
         emit RentalCompleted(carId, rent.renter, rentalFee, deposit);
     }
 
     function getAvailableCars() external view returns (uint[] memory) {
         uint[] memory temp = new uint[](carCount);
-        uint count;
+        uint count = 0;
         for (uint i = 1; i <= carCount; i++) {
             if (cars[i].isAvailable) {
                 temp[count++] = i;
             }
         }
+
         uint[] memory available = new uint[](count);
         for (uint i = 0; i < count; i++) {
             available[i] = temp[i];
@@ -138,8 +185,15 @@ contract CarRental {
         return available;
     }
 
-    function getRentalInfo(uint carId) external view carExists(carId) returns (address renter, uint startTime, uint endTime, bool isActive) {
-        Rental storage r = rentals[carId];
+    function getRentalInfo(
+        uint carId
+    )
+        external
+        view
+        carExists(carId)
+        returns (address renter, uint startTime, uint endTime, bool isActive)
+    {
+        Rental memory r = rentals[carId];
         return (r.renter, r.startTime, r.endTime, r.isActive);
     }
 }
