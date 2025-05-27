@@ -1,0 +1,11 @@
+{
+  "network": {
+    "name": "localhost",
+    "chainId": "31337"
+  },
+  "contractAddress": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "blockNumber": 3,
+  "gasUsed": "Check transaction receipt",
+  "timestamp": "2025-05-27T05:08:56.939Z"
+}
