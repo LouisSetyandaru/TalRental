@@ -81,6 +81,9 @@ contract CarRental {
         uint depositAmount,
         string calldata metadataURI
     ) external {
+        require(pricePerDay > 0, "Price must be greater than 0");
+        require(depositAmount > 0, "Deposit must be greater than 0");
+
         carCount++;
         cars[carCount] = Car(
             carCount,
@@ -105,6 +108,9 @@ contract CarRental {
         uint newDepositAmount
     ) external onlyCarOwner(carId) carExists(carId) {
         require(cars[carId].isAvailable, "Cannot change once booked");
+        require(newPricePerDay > 0, "Price must be greater than 0");
+        require(newDepositAmount > 0, "Deposit must be greater than 0");
+
         cars[carId].pricePerDay = newPricePerDay;
         cars[carId].depositAmount = newDepositAmount;
         emit RateAndDepositSet(carId, newPricePerDay, newDepositAmount);
@@ -118,7 +124,13 @@ contract CarRental {
         Car storage car = cars[carId];
         require(car.isAvailable, "Car unavailable");
         require(endTime > startTime, "Invalid period");
+        require(startTime > block.timestamp, "Start time must be in future");
+
         uint daysBooked = (endTime - startTime) / 1 days;
+        if (daysBooked == 0) {
+            daysBooked = 1; // Minimum 1 day rental
+        }
+
         uint totalCost = daysBooked * car.pricePerDay + car.depositAmount;
         require(msg.value == totalCost, "Incorrect payment");
 
@@ -136,6 +148,10 @@ contract CarRental {
 
         uint timeUntilStart = rent.startTime - block.timestamp;
         uint rentalDays = (rent.endTime - rent.startTime) / 1 days;
+        if (rentalDays == 0) {
+            rentalDays = 1; // Minimum 1 day rental
+        }
+
         uint totalAmount = rentalDays *
             cars[carId].pricePerDay +
             cars[carId].depositAmount;
@@ -145,7 +161,17 @@ contract CarRental {
 
         rent.isActive = false;
         cars[carId].isAvailable = true;
-        payable(rent.renter).transfer(refundAmount);
+
+        // Transfer remaining balance to owner if partial refund
+        if (refundAmount < totalAmount) {
+            uint ownerAmount = totalAmount - refundAmount;
+            cars[carId].owner.transfer(ownerAmount);
+        }
+
+        if (refundAmount > 0) {
+            payable(rent.renter).transfer(refundAmount);
+        }
+
         emit BookingCancelled(carId, rent.renter, refundAmount);
     }
 
@@ -156,8 +182,12 @@ contract CarRental {
         require(rent.isActive, "Not active");
         require(block.timestamp >= rent.endTime, "Too early");
 
-        uint rentalFee = ((rent.endTime - rent.startTime) / 1 days) *
-            cars[carId].pricePerDay;
+        uint rentalDays = (rent.endTime - rent.startTime) / 1 days;
+        if (rentalDays == 0) {
+            rentalDays = 1; // Minimum 1 day rental
+        }
+
+        uint rentalFee = rentalDays * cars[carId].pricePerDay;
         uint deposit = cars[carId].depositAmount;
 
         rent.isActive = false;
