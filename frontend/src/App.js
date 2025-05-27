@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import './App.css';
 
 // Replace with your actual contract address
 const CONTRACT_ADDRESS = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
@@ -27,6 +30,7 @@ function App() {
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("browse");
+  const [selectedCar, setSelectedCar] = useState(null);
 
   // Form states
   const [listCarForm, setListCarForm] = useState({
@@ -57,7 +61,7 @@ function App() {
         console.error("Error initializing contract:", error);
       }
     } else {
-      alert("Please install MetaMask!");
+      toast.error("Please install MetaMask!");
     }
   };
 
@@ -68,24 +72,27 @@ function App() {
           method: "eth_requestAccounts"
         });
         setAccount(accounts[0]);
+        toast.success("Wallet connected!");
       } catch (error) {
-        console.error("Error connecting wallet:", error);
+        toast.error("Connection failed: " + error.message);
       }
+    } else {
+      toast.error("Please install MetaMask!");
     }
   };
 
   const loadCars = async () => {
     if (!contract) return;
-    
+
     setLoading(true);
     try {
       const carCount = await contract.carCount();
       const carPromises = [];
-      
+
       for (let i = 1; i <= carCount; i++) {
         carPromises.push(contract.cars(i));
       }
-      
+
       const carData = await Promise.all(carPromises);
       const formattedCars = carData.map((car, index) => ({
         id: car.id.toString(),
@@ -95,10 +102,11 @@ function App() {
         isAvailable: car.isAvailable,
         metadataURI: car.metadataURI
       }));
-      
+
       setCars(formattedCars);
     } catch (error) {
       console.error("Error loading cars:", error);
+      toast.error("Error loading cars");
     }
     setLoading(false);
   };
@@ -106,25 +114,30 @@ function App() {
   const listCar = async () => {
     if (!contract) return;
 
+    if (!listCarForm.pricePerDay || !listCarForm.depositAmount || !listCarForm.metadataURI) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
     setLoading(true);
     try {
       const pricePerDayWei = ethers.parseEther(listCarForm.pricePerDay);
       const depositAmountWei = ethers.parseEther(listCarForm.depositAmount);
-      
+
       const tx = await contract.listCar(
         pricePerDayWei,
         depositAmountWei,
         listCarForm.metadataURI
       );
-      
+
       await tx.wait();
-      alert("Car listed successfully!");
-      
+      toast.success("Car listed successfully!");
+
       setListCarForm({ pricePerDay: "", depositAmount: "", metadataURI: "" });
       loadCars();
     } catch (error) {
       console.error("Error listing car:", error);
-      alert("Error listing car: " + error.message);
+      toast.error("Error listing car: " + error.message);
     }
     setLoading(false);
   };
@@ -138,7 +151,7 @@ function App() {
     const startTime = Math.floor(new Date(startDate).getTime() / 1000);
     const endTime = Math.floor(new Date(endDate).getTime() / 1000);
     const days = Math.ceil((endTime - startTime) / 86400);
-    
+
     const totalCost = ethers.parseEther((parseFloat(car.pricePerDay) * days + parseFloat(car.depositAmount)).toString());
 
     setLoading(true);
@@ -146,13 +159,13 @@ function App() {
       const tx = await contract.bookCar(carId, startTime, endTime, {
         value: totalCost
       });
-      
+
       await tx.wait();
-      alert("Car booked successfully!");
+      toast.success("Car booked successfully!");
       loadCars();
     } catch (error) {
       console.error("Error booking car:", error);
-      alert("Error booking car: " + error.message);
+      toast.error("Error booking car: " + error.message);
     }
     setLoading(false);
   };
@@ -164,11 +177,11 @@ function App() {
     try {
       const tx = await contract.cancelBooking(carId);
       await tx.wait();
-      alert("Booking cancelled successfully!");
+      toast.success("Booking cancelled successfully!");
       loadCars();
     } catch (error) {
       console.error("Error cancelling booking:", error);
-      alert("Error cancelling booking: " + error.message);
+      toast.error("Error cancelling booking: " + error.message);
     }
     setLoading(false);
   };
@@ -180,11 +193,11 @@ function App() {
     try {
       const tx = await contract.completeRental(carId);
       await tx.wait();
-      alert("Rental completed successfully!");
+      toast.success("Rental completed successfully!");
       loadCars();
     } catch (error) {
       console.error("Error completing rental:", error);
-      alert("Error completing rental: " + error.message);
+      toast.error("Error completing rental: " + error.message);
     }
     setLoading(false);
   };
@@ -194,102 +207,132 @@ function App() {
     const [endDate, setEndDate] = useState("");
     const [showBookingForm, setShowBookingForm] = useState(false);
 
+    const isOwner = car.owner.toLowerCase() === account?.toLowerCase();
+    const isValidDates = startDate && endDate && new Date(startDate) < new Date(endDate);
+
     const calculateTotal = () => {
-      if (!startDate || !endDate) return 0;
+      if (!isValidDates) return 0;
       const start = new Date(startDate);
       const end = new Date(endDate);
       const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
       return (parseFloat(car.pricePerDay) * days + parseFloat(car.depositAmount)).toFixed(4);
     };
 
+    const getDays = () => {
+      if (!isValidDates) return 0;
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    };
+
     return (
-      <div className="bg-white rounded-lg shadow-md p-6 mb-4">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-xl font-bold">Car #{car.id}</h3>
-            <p className="text-gray-600">{car.metadataURI}</p>
-            <p className="text-sm text-gray-500">Owner: {car.owner.slice(0, 10)}...</p>
+      <div className="car-card">
+        <div className="car-card-header">
+          <div className="car-info">
+            <h3 className="car-title">Car #{car.id}</h3>
+            <p className="car-description">{car.metadataURI}</p>
+            <div className="car-meta">
+              <span className={`status-badge ${car.isAvailable ? 'available' : 'rented'}`}>
+                {car.isAvailable ? 'Available' : 'Rented'}
+              </span>
+              <span className="owner-info">
+                Owner: {car.owner === account ? 'You' : `${car.owner.slice(0, 6)}...${car.owner.slice(-4)}`}
+              </span>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-lg font-semibold">{car.pricePerDay} ETH/day</p>
-            <p className="text-sm text-gray-600">Deposit: {car.depositAmount} ETH</p>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
-              car.isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-            }`}>
-              {car.isAvailable ? 'Available' : 'Rented'}
-            </span>
+
+          <div className="pricing-info">
+            <div className="price-main">
+              {car.pricePerDay} <span className="price-unit">ETH/day</span>
+            </div>
+            <div className="price-deposit">Deposit: {car.depositAmount} ETH</div>
+
+            {!isOwner && car.isAvailable && (
+              <button
+                onClick={() => setShowBookingForm(!showBookingForm)}
+                className="btn btn-primary"
+              >
+                {showBookingForm ? 'Close Booking' : 'Book Now'}
+              </button>
+            )}
           </div>
         </div>
 
-        {car.isAvailable && car.owner.toLowerCase() !== account.toLowerCase() && (
-          <div>
-            {!showBookingForm ? (
-              <button
-                onClick={() => setShowBookingForm(true)}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              >
-                Book Now
-              </button>
-            ) : (
-              <div className="border-t pt-4 mt-4">
-                <h4 className="font-semibold mb-3">Book this car</h4>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Start Date</label>
-                    <input
-                      type="datetime-local"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full p-2 border rounded"
-                    />
+        {showBookingForm && (
+          <div className="booking-form">
+            <h4 className="booking-title">Booking Details</h4>
+            <div className="date-inputs">
+              <div className="input-group">
+                <label className="input-label">Start Date</label>
+                <input
+                  type="datetime-local"
+                  min={new Date().toISOString().slice(0, 16)}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="date-input"
+                />
+              </div>
+              <div className="input-group">
+                <label className="input-label">End Date</label>
+                <input
+                  type="datetime-local"
+                  min={startDate || new Date().toISOString().slice(0, 16)}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="date-input"
+                />
+              </div>
+            </div>
+
+            {isValidDates && (
+              <div className="cost-breakdown">
+                <div className="cost-summary">
+                  <div className="total-cost">Total Cost: {calculateTotal()} ETH</div>
+                  <div className="cost-details">
+                    <div>Rental ({getDays()} days × {car.pricePerDay} ETH): {(parseFloat(car.pricePerDay) * getDays()).toFixed(4)} ETH</div>
+                    <div>Deposit: {car.depositAmount} ETH</div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">End Date</label>
-                    <input
-                      type="datetime-local"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                </div>
-                {startDate && endDate && (
-                  <p className="mb-3 font-semibold">Total Cost: {calculateTotal()} ETH</p>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => bookCar(car.id, startDate, endDate)}
-                    disabled={!startDate || !endDate || loading}
-                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50"
-                  >
-                    Confirm Booking
-                  </button>
-                  <button
-                    onClick={() => setShowBookingForm(false)}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
                 </div>
               </div>
             )}
+
+            <div className="booking-actions">
+              <button
+                onClick={() => bookCar(car.id, startDate, endDate)}
+                disabled={!isValidDates || loading}
+                className="btn btn-success"
+              >
+                {loading ? 'Processing...' : 'Confirm Booking'}
+              </button>
+              <button
+                onClick={() => setShowBookingForm(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
-        {car.owner.toLowerCase() === account.toLowerCase() && !car.isAvailable && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => cancelBooking(car.id)}
-              className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
-            >
-              Cancel Booking
-            </button>
-            <button
-              onClick={() => completeRental(car.id)}
-              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-            >
-              Complete Rental
-            </button>
+        {isOwner && !car.isAvailable && (
+          <div className="management-section">
+            <h4 className="management-title">Car Management</h4>
+            <div className="management-actions">
+              <button
+                onClick={() => cancelBooking(car.id)}
+                className="btn btn-warning"
+                disabled={loading}
+              >
+                {loading ? 'Processing...' : 'Cancel Booking'}
+              </button>
+              <button
+                onClick={() => completeRental(car.id)}
+                className="btn btn-success"
+                disabled={loading}
+              >
+                {loading ? 'Processing...' : 'Complete Rental'}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -297,116 +340,127 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">Car Rental DApp</h1>
-            <div className="text-sm text-gray-600">
-              {account ? `Connected: ${account.slice(0, 10)}...` : "Not connected"}
+    <div className="app">
+      <ToastContainer position="bottom-right" />
+
+      <header className="header">
+        <div className="container">
+          <div className="header-content">
+            <h1 className="logo">
+              <span className="logo-drive">Tal</span>
+              <span className="logo-chain">Rental</span>
+            </h1>
+
+            <div className="wallet-section">
+              {account ? (
+                <div className="wallet-connected">
+                  <div className="connection-indicator"></div>
+                  <span className="wallet-address">
+                    Connected: {account.slice(0, 6)}...{account.slice(-4)}
+                  </span>
+                </div>
+              ) : (
+                <button onClick={connectWallet} className="btn btn-primary">
+                  Connect Wallet
+                </button>
+              )}
             </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <nav className="flex space-x-1 mb-8">
-          <button
-            onClick={() => setActiveTab("browse")}
-            className={`px-4 py-2 rounded-lg font-medium ${
-              activeTab === "browse"
-                ? "bg-blue-500 text-white"
-                : "bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            Browse Cars
-          </button>
-          <button
-            onClick={() => setActiveTab("list")}
-            className={`px-4 py-2 rounded-lg font-medium ${
-              activeTab === "list"
-                ? "bg-blue-500 text-white"
-                : "bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            List Your Car
-          </button>
-        </nav>
+      <main className="main">
+        <div className="container">
+          <nav className="nav-tabs">
+            <button
+              onClick={() => setActiveTab("browse")}
+              className={`nav-tab ${activeTab === "browse" ? "active" : ""}`}
+            >
+              Browse Cars
+            </button>
+            <button
+              onClick={() => setActiveTab("list")}
+              className={`nav-tab ${activeTab === "list" ? "active" : ""}`}
+            >
+              List Your Car
+            </button>
+          </nav>
 
-        {activeTab === "browse" && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">Available Cars</h2>
-              <button
-                onClick={loadCars}
-                disabled={loading}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
-              >
-                {loading ? "Loading..." : "Refresh"}
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="text-center py-8">Loading cars...</div>
-            ) : cars.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">No cars available</div>
-            ) : (
-              <div className="grid gap-6">
-                {cars.map((car) => (
-                  <CarCard key={car.id} car={car} />
-                ))}
+          {activeTab === "browse" && (
+            <div className="browse-section">
+              <div className="section-header">
+                <h2 className="section-title">Available Cars</h2>
+                <button
+                  onClick={loadCars}
+                  disabled={loading}
+                  className="btn btn-secondary"
+                >
+                  {loading ? "Loading..." : "Refresh"}
+                </button>
               </div>
-            )}
-          </div>
-        )}
 
-        {activeTab === "list" && (
-          <div>
-            <h2 className="text-xl font-semibold mb-6">List Your Car</h2>
-            <div className="bg-white rounded-lg shadow-md p-6 max-w-md">
-              <div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">Price per Day (ETH)</label>
+              {loading ? (
+                <div className="loading">Loading cars...</div>
+              ) : cars.length === 0 ? (
+                <div className="empty-state">No cars available</div>
+              ) : (
+                <div className="cars-grid">
+                  {cars.map((car) => (
+                    <CarCard key={car.id} car={car} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "list" && (
+            <div className="list-section">
+              <h2 className="section-title">List Your Car</h2>
+              <div className="list-form">
+                <div className="input-group">
+                  <label className="input-label">Price per Day (ETH)</label>
                   <input
                     type="number"
                     step="0.001"
                     value={listCarForm.pricePerDay}
-                    onChange={(e) => setListCarForm({...listCarForm, pricePerDay: e.target.value})}
-                    className="w-full p-3 border rounded-lg"
+                    onChange={(e) => setListCarForm({ ...listCarForm, pricePerDay: e.target.value })}
+                    className="form-input"
+                    placeholder="0.01"
                   />
                 </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">Deposit Amount (ETH)</label>
+                <div className="input-group">
+                  <label className="input-label">Deposit Amount (ETH)</label>
                   <input
                     type="number"
                     step="0.001"
                     value={listCarForm.depositAmount}
-                    onChange={(e) => setListCarForm({...listCarForm, depositAmount: e.target.value})}
-                    className="w-full p-3 border rounded-lg"
+                    onChange={(e) => setListCarForm({ ...listCarForm, depositAmount: e.target.value })}
+                    className="form-input"
+                    placeholder="0.1"
                   />
                 </div>
-                <div className="mb-6">
-                  <label className="block text-sm font-medium mb-2">Car Description</label>
+                <div className="input-group">
+                  <label className="input-label">Car Description</label>
                   <input
                     type="text"
                     value={listCarForm.metadataURI}
-                    onChange={(e) => setListCarForm({...listCarForm, metadataURI: e.target.value})}
+                    onChange={(e) => setListCarForm({ ...listCarForm, metadataURI: e.target.value })}
                     placeholder="e.g., 2023 Tesla Model 3, Blue"
-                    className="w-full p-3 border rounded-lg"
+                    className="form-input"
                   />
                 </div>
                 <button
                   onClick={listCar}
                   disabled={loading}
-                  className="w-full bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 disabled:opacity-50"
+                  className="btn btn-success btn-full"
                 >
                   {loading ? "Listing..." : "List Car"}
                 </button>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

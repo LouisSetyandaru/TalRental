@@ -71,14 +71,14 @@ async function main() {
   const networkName = deploymentInfo.network.name;
   
   if (networkName === "mainnet") {
-    console.log("\n⚠️  MAINNET DEPLOYMENT DETECTED!");
-    console.log("🔍 Remember to verify your contract on Etherscan");
-    console.log("📝 Update your frontend with the new contract address");
-    console.log("🔐 Ensure contract ownership is properly managed");
+    console.log("\n  MAINNET DEPLOYMENT DETECTED!");
+    console.log(" Remember to verify your contract on Etherscan");
+    console.log(" Update your frontend with the new contract address");
+    console.log(" Ensure contract ownership is properly managed");
   } else if (networkName === "goerli" || networkName === "sepolia") {
-    console.log("\n🧪 Testnet deployment completed");
-    console.log("🔍 Verify on testnet explorer if needed");
-    console.log("💡 You can add test data using the contract functions");
+    console.log("\n Testnet deployment completed");
+    console.log(" Verify on testnet explorer if needed");
+    console.log(" You can add test data using the contract functions");
   }
 
   // Generate ABI file for frontend
@@ -106,8 +106,8 @@ async function main() {
   fs.writeFileSync(configFile, JSON.stringify(deploymentInfo, null, 2));
   console.log("Deployment config saved to:", configFile);
 
-  console.log("\n✅ Deployment completed successfully!");
-  console.log("\n📋 Next Steps:");
+  console.log("\n Deployment completed successfully!");
+  console.log("\n Next Steps:");
   console.log("1. Update CONTRACT_ADDRESS in your frontend");
   console.log("2. Update the ABI import in your React app");
   console.log("3. Test the contract functions");
@@ -123,10 +123,10 @@ async function main() {
 // Error handling and script execution
 main()
   .then((result) => {
-    console.log("\n🎉 Script completed successfully!");
+    console.log("\n Script completed successfully!");
     process.exit(0);
   })
   .catch((error) => {
-    console.error("\n❌ Deployment failed:", error);
+    console.error("\n Deployment failed:", error);
     process.exit(1);
   });
