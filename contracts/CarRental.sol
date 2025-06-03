@@ -18,7 +18,7 @@ contract CarRental {
         bool isActive;
     }
 
-    uint public carCount;
+    uint256 public carCount;
     mapping(uint => Car) public cars;
     mapping(uint => Rental) public rentals;
 

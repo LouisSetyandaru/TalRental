@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import './App.css';
 // Replace with your actual contract address
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const CONTRACT_ADDRESS = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
 
 // Your contract ABI
 const CarRentalABI = [
@@ -24,14 +24,27 @@ const CarRentalABI = [
 // Mock API Service for development
 const ApiService = {
   async getAllCars() {
-    // Mock data - replace with actual API call
-    return [];
+    const response = await fetch("http://localhost:5050/api/cars");
+    if (!response.ok) {
+      throw new Error("Failed to fetch cars");
+    }
+    return await response.json();
   },
 
   async createCar(carData) {
-    console.log('Creating car in database:', carData);
-    // Mock implementation - replace with actual API call
-    return { success: true };
+    const response = await fetch("http://localhost:5050/api/cars", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(carData)
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to save car to database");
+    }
+
+    return await response.json();
   },
 
   async bookCar(carId, bookingData) {

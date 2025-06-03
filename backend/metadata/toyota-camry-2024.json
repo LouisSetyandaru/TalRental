@@ -1,0 +1,18 @@
+{
+    "name": "Toyota Camry 2024",
+    "image": "https://yourdomain.com/images/camry.jpg",
+    "description": "A clean and fuel-efficient Toyota Camry available in Jakarta.",
+    "attributes": {
+        "brand": "Toyota",
+        "model": "Camry",
+        "year": 2024,
+        "color": "White",
+        "type": "Sedan",
+        "location": "Jakarta",
+        "features": [
+            "GPS",
+            "Bluetooth",
+            "Air Conditioning"
+        ]
+    }
+}
