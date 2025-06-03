@@ -1,5 +1,8 @@
-const db = require('./db');
-const startBlockchainListener = require('./services/blockchainListener');
+// server.js - Updated backend server
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const dotenv = require('dotenv');
 
 // Load environment variables
 dotenv.config();
@@ -63,6 +66,7 @@ connectDB().then(() => {
     console.log(`🔗 MongoDB URI: ${process.env.MONGO_URI}`);
   });
 });
+
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

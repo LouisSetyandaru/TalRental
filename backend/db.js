@@ -1,21 +1,16 @@
-const { MongoClient } = require('mongodb');
+const mongoose = require('mongoose');
 
-const uri = process.env.MONGODB_URI || "mongodb://localhost:27017";
-const client = new MongoClient(uri);
-
-let dbConnection;
-
-module.exports = {
-  connectToServer: async function() {
-    try {
-      dbConnection = await client.connect();
-      console.log("Successfully connected to MongoDB.");
-    } catch (err) {
-      console.error("MongoDB connection error:", err);
-      process.exit(1);
-    }
-  },
-  getDb: function() {
-    return dbConnection.db("talrental");
+const connectToServer = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/talrental', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('✅ Connected to MongoDB');
+  } catch (err) {
+    console.error('❌ MongoDB connection failed:', err);
+    process.exit(1);
   }
 };
+
+module.exports = connectToServer;
