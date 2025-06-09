@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import './App.css';
-// Replace with your actual contract address
-const CONTRACT_ADDRESS = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
+import deployment from './contracts/deployment.json';
 
-// Your contract ABI
+const CONTRACT_ADDRESS = deployment.contractAddress;
+
 const CarRentalABI = [
   "function carCount() view returns (uint256)",
   "function cars(uint256) view returns (uint256 id, address owner, uint256 pricePerDay, uint256 depositAmount, bool isAvailable, string metadataURI)",
