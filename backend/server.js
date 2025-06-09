@@ -8,7 +8,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5050;
 
 const path = require('path');
 app.use('/metadata', express.static(path.join(__dirname, 'metadata')));
