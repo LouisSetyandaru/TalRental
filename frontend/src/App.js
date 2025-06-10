@@ -24,11 +24,22 @@ const CarRentalABI = [
 // Mock API Service for development
 const ApiService = {
   async getAllCars() {
-    const response = await fetch("http://localhost:5050/api/cars");
-    if (!response.ok) {
-      throw new Error("Failed to fetch cars");
+    try {
+      const response = await fetch("http://localhost:5050/api/cars");
+      if (!response.ok) {
+        throw new Error("Failed to fetch cars");
+      }
+      const data = await response.json();
+      return data.map(car => ({
+        ...car,
+        carId: car.id || car._id, // Handle both id and _id
+        pricePerDay: car.pricePerDay.toString(),
+        depositAmount: car.depositAmount.toString()
+      }));
+    } catch (error) {
+      console.error("API Error:", error);
+      throw error;
     }
-    return await response.json();
   },
 
   async createCar(carData) {
@@ -105,7 +116,7 @@ function App() {
     setNotification({ message, type, show: true });
     setTimeout(() => {
       setNotification({ message: "", type: "", show: false });
-    }, 5000);
+    }, 5050);
   };
 
   const initializeContract = async () => {
@@ -141,59 +152,77 @@ function App() {
   };
 
   const loadCars = async () => {
-    if (!contract) return;
+    if (!contract) {
+      console.log("Contract not initialized");
+      return;
+    }
 
     setLoading(true);
     try {
-      // Get data from smart contract
-      const carCount = await contract.carCount();
-      const carPromises = [];
+      // Get data from both sources in parallel
+      const [dbCars, carCount] = await Promise.all([
+        ApiService.getAllCars().catch(e => {
+          console.warn("Using empty array for DB cars due to error:", e);
+          return [];
+        }),
+        contract.carCount()
+      ]);
 
-      for (let i = 1; i <= carCount; i++) {
-        carPromises.push(contract.cars(i));
+      console.log("DB Cars:", dbCars);
+      console.log("Blockchain Car Count:", carCount.toString());
+
+      // If no cars in blockchain but we have DB cars
+      if (carCount === 0 && dbCars.length > 0) {
+        setCars(dbCars.map(car => ({
+          ...car,
+          id: car.carId,
+          isAvailable: car.isAvailable,
+          owner: car.ownerAddress
+        })));
+        setLoading(false);
+        return;
       }
 
-      const contractCarData = await Promise.all(carPromises);
+      // Get blockchain data
+      const contractCarData = await Promise.all(
+        Array.from({ length: Number(carCount) }, (_, i) =>
+          contract.cars(i + 1)
+      ));
 
-      // Get data from database
-      let dbCars = [];
-      try {
-        dbCars = await ApiService.getAllCars();
-      } catch (error) {
-        console.warn("Could not fetch data from database:", error);
-      }
-
-      // Merge data from smart contract and database
-      const mergedCars = contractCarData.map((contractCar, index) => {
+      // Merge data
+      const mergedCars = contractCarData.map(contractCar => {
         const carId = contractCar.id.toString();
-        const dbCar = dbCars.find(car => car.carId === carId) || {};
+        const dbCar = dbCars.find(c => c.carId === carId) || {};
 
         return {
           id: carId,
-          owner: contractCar.owner,
+          owner: contractCar.owner || dbCar.ownerAddress,
           pricePerDay: ethers.formatEther(contractCar.pricePerDay),
           depositAmount: ethers.formatEther(contractCar.depositAmount),
           isAvailable: contractCar.isAvailable,
           metadataURI: contractCar.metadataURI,
           // Additional data from database
-          carBrand: dbCar.carBrand || '',
-          carModel: dbCar.carModel || '',
-          carYear: dbCar.carYear || '',
-          carColor: dbCar.carColor || '',
-          carType: dbCar.carType || '',
-          carImage: dbCar.carImage || '',
-          location: dbCar.location || '',
+          carBrand: dbCar.carBrand,
+          carModel: dbCar.carModel,
+          carYear: dbCar.carYear,
+          carColor: dbCar.carColor,
+          carType: dbCar.carType,
+          carImage: dbCar.carImage || dbCar.imageURL,
+          location: dbCar.location,
           features: dbCar.features || [],
-          description: dbCar.description || contractCar.metadataURI
+          description: dbCar.description,
+          specs: dbCar.specs || {}
         };
       });
 
       setCars(mergedCars);
     } catch (error) {
       console.error("Error loading cars:", error);
-      showNotification("Error loading cars", "error");
+      showNotification("Error loading cars: " + error.message, "error");
+      setCars([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const listCar = async () => {
