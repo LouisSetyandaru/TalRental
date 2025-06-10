@@ -599,77 +599,79 @@ function App() {
     };
 
     return (
-      <div className="car-card">
-        {/* Car information display */}
-        <div className="car-card-header">
-          {car.carImage && (
-            <div className="car-image">
-              <img src={car.carImage} alt={`${car.carBrand} ${car.carModel}`} />
-            </div>
-          )}
-
-          <div className="car-info">
-            <h3 className="car-title">
-              {car.carBrand && car.carModel
-                ? `${car.carBrand} ${car.carModel} ${car.carYear}`
-                : `Car #${car.id}`}
-            </h3>
-
-            <p className="car-description">{car.description}</p>
-
-            <div className="car-details">
-              {car.carColor && <span className="car-detail">Color: {car.carColor}</span>}
-              {car.carType && <span className="car-detail">Type: {car.carType}</span>}
-              {car.location && <span className="car-detail">Location: {car.location}</span>}
-            </div>
-
-            {car.features && car.features.length > 0 && (
-              <div className="car-features">
-                <strong>Features:</strong>
-                <ul>
-                  {car.features.map((feature, index) => (
-                    <li key={index}>{feature}</li>
-                  ))}
-                </ul>
+      <div>
+        <div className="car-card">
+          {/* Car information display */}
+          <div className="car-card-header">
+            {car.carImage && (
+              <div className="car-image">
+                <img src={car.carImage} alt={`${car.carBrand} ${car.carModel}`} />
               </div>
             )}
 
-            <div className="car-meta">
-              <span className={`status-badge ${car.isAvailable ? 'available' : 'rented'}`}>
-                {car.isAvailable ? 'Available' : 'Rented'}
-              </span>
-              <span className="owner-info">
-                Owner: {car.owner === account ? 'You' : `${car.owner.slice(0, 6)}...${car.owner.slice(-4)}`}
-              </span>
+            <div className="car-info">
+              <h3 className="car-title">
+                {car.carBrand && car.carModel
+                  ? `${car.carBrand} ${car.carModel} ${car.carYear}`
+                  : `Car #${car.id}`}
+              </h3>
+
+              <p className="car-description">{car.description}</p>
+
+              <div className="car-details">
+                {car.carColor && <span className="car-detail">Color: {car.carColor}</span>}
+                {car.carType && <span className="car-detail">Type: {car.carType}</span>}
+                {car.location && <span className="car-detail">Location: {car.location}</span>}
+              </div>
+
+              {car.features && car.features.length > 0 && (
+                <div className="car-features">
+                  <strong>Features:</strong>
+                  <ul>
+                    {car.features.map((feature, index) => (
+                      <li key={index}>{feature}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="car-meta">
+                <span className={`status-badge ${car.isAvailable ? 'available' : 'rented'}`}>
+                  {car.isAvailable ? 'Available' : 'Rented'}
+                </span>
+                <span className="owner-info">
+                  Owner: {car.owner === account ? 'You' : `${car.owner.slice(0, 6)}...${car.owner.slice(-4)}`}
+                </span>
+              </div>
+            </div>
+
+            <div className="pricing-info">
+              <div className="price-main">
+                {car.pricePerDay} <span className="price-unit">ETH/day</span>
+              </div>
+              <div className="price-deposit">Deposit: {car.depositAmount} ETH</div>
+
+              {!isOwner && car.isAvailable && (
+                <button
+                  onClick={() => setShowBookingForm(!showBookingForm)}
+                  className="btn btn-primary"
+                >
+                  {showBookingForm ? 'Close Booking' : 'Book Now'}
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="pricing-info">
-            <div className="price-main">
-              {car.pricePerDay} <span className="price-unit">ETH/day</span>
-            </div>
-            <div className="price-deposit">Deposit: {car.depositAmount} ETH</div>
-
-            {!isOwner && car.isAvailable && (
-              <button
-                onClick={() => setShowBookingForm(!showBookingForm)}
-                className="btn btn-primary"
-              >
-                {showBookingForm ? 'Close Booking' : 'Book Now'}
-              </button>
-            )}
-          </div>
+          {/* Return button for cars rented by current user */}
+          {isRentedByMe && (
+            <button
+              onClick={() => setShowReturnForm(true)}
+              className="btn btn-warning"
+            >
+              Return Car
+            </button>
+          )}
         </div>
-
-        {/* Return button for cars rented by current user */}
-        {isRentedByMe && (
-          <button
-            onClick={() => setShowReturnForm(true)}
-            className="btn btn-warning"
-          >
-            Return Car
-          </button>
-        )}
 
         {/* Booking Form Modal */}
         {showBookingForm && (
