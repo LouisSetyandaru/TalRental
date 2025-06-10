@@ -595,16 +595,6 @@ function App() {
           </div>
         </div>
 
-        {/* Booking button for available cars */}
-        {!isOwner && car.isAvailable && (
-          <button
-            onClick={() => setShowBookingForm(true)}
-            className="btn btn-primary"
-          >
-            Book This Car
-          </button>
-        )}
-
         {/* Return button for cars rented by current user */}
         {isRentedByMe && (
           <button
