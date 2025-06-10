@@ -168,54 +168,90 @@ function App() {
         contract.carCount()
       ]);
 
-      console.log("DB Cars:", dbCars);
+      console.log("DB Cars from API:", dbCars);
       console.log("Blockchain Car Count:", carCount.toString());
 
-      // If no cars in blockchain but we have DB cars
-      if (carCount === 0 && dbCars.length > 0) {
-        setCars(dbCars.map(car => ({
-          ...car,
-          id: car.carId,
-          isAvailable: car.isAvailable,
-          owner: car.ownerAddress
-        })));
-        setLoading(false);
-        return;
+      // Get blockchain data
+      const blockchainCars = [];
+      for (let i = 0; i < Number(carCount); i++) {
+        try {
+          const car = await contract.cars(i + 1); // Car IDs start at 1
+          blockchainCars.push({
+            id: car.id.toString(),
+            owner: car.owner,
+            pricePerDay: ethers.formatEther(car.pricePerDay),
+            depositAmount: ethers.formatEther(car.depositAmount),
+            isAvailable: car.isAvailable,
+            metadataURI: car.metadataURI
+          });
+        } catch (error) {
+          console.error(`Error fetching car ${i + 1} from blockchain:`, error);
+        }
       }
 
-      // Get blockchain data
-      const contractCarData = await Promise.all(
-        Array.from({ length: Number(carCount) }, (_, i) =>
-          contract.cars(i + 1)
-      ));
+      console.log("Blockchain cars:", blockchainCars);
 
-      // Merge data
-      const mergedCars = contractCarData.map(contractCar => {
-        const carId = contractCar.id.toString();
-        const dbCar = dbCars.find(c => c.carId === carId) || {};
+      // Merge data - prioritize blockchain data but enrich with DB data
+      const mergedCars = blockchainCars.map(blockchainCar => {
+        // Find matching DB car (check both id and _id fields)
+        const dbCar = dbCars.find(dbCar =>
+          dbCar.id === blockchainCar.id ||
+          dbCar._id === blockchainCar.id ||
+          dbCar.carId === blockchainCar.id
+        );
 
         return {
-          id: carId,
-          owner: contractCar.owner || dbCar.ownerAddress,
-          pricePerDay: ethers.formatEther(contractCar.pricePerDay),
-          depositAmount: ethers.formatEther(contractCar.depositAmount),
-          isAvailable: contractCar.isAvailable,
-          metadataURI: contractCar.metadataURI,
-          // Additional data from database
-          carBrand: dbCar.carBrand,
-          carModel: dbCar.carModel,
-          carYear: dbCar.carYear,
-          carColor: dbCar.carColor,
-          carType: dbCar.carType,
-          carImage: dbCar.carImage || dbCar.imageURL,
-          location: dbCar.location,
-          features: dbCar.features || [],
-          description: dbCar.description,
-          specs: dbCar.specs || {}
+          ...blockchainCar, // Blockchain data takes precedence
+          // Database enrichment
+          carBrand: dbCar?.carBrand || dbCar?.model?.split(' ')[0] || 'Unknown',
+          carModel: dbCar?.carModel || dbCar?.model?.split(' ').slice(1).join(' ') || 'Unknown',
+          carYear: dbCar?.carYear || dbCar?.year?.toString() || '',
+          carColor: dbCar?.carColor || dbCar?.specs?.color || '',
+          carType: dbCar?.carType || dbCar?.specs?.type || '',
+          carImage: dbCar?.carImage || dbCar?.imageURL || '',
+          location: dbCar?.location || '',
+          features: dbCar?.features || dbCar?.specs?.features || [],
+          description: dbCar?.description || '',
+          specs: dbCar?.specs || {},
+          // Preserve DB IDs if they exist
+          _id: dbCar?._id,
+          dbId: dbCar?._id || dbCar?.id
         };
       });
 
-      setCars(mergedCars);
+      // Add any DB cars that aren't in blockchain (for development/testing)
+      const dbOnlyCars = dbCars.filter(dbCar =>
+        !blockchainCars.some(bcCar =>
+          bcCar.id === dbCar.id ||
+          bcCar.id === dbCar._id ||
+          bcCar.id === dbCar.carId
+        )
+      ).map(dbCar => ({
+        id: dbCar.id || dbCar._id || dbCar.carId,
+        owner: dbCar.ownerAddress,
+        pricePerDay: dbCar.pricePerDay.toString(),
+        depositAmount: dbCar.depositAmount.toString(),
+        isAvailable: dbCar.isAvailable,
+        metadataURI: dbCar.metadataURI,
+        // Database fields
+        carBrand: dbCar.carBrand || dbCar.model?.split(' ')[0] || 'Unknown',
+        carModel: dbCar.carModel || dbCar.model?.split(' ').slice(1).join(' ') || 'Unknown',
+        carYear: dbCar.carYear || dbCar.year?.toString() || '',
+        carColor: dbCar.carColor || dbCar.specs?.color || '',
+        carType: dbCar.carType || dbCar.specs?.type || '',
+        carImage: dbCar.carImage || dbCar.imageURL || '',
+        location: dbCar.location || '',
+        features: dbCar.features || dbCar.specs?.features || [],
+        description: dbCar.description || '',
+        specs: dbCar.specs || {},
+        _id: dbCar._id,
+        dbId: dbCar._id || dbCar.id,
+        isDbOnly: true // Flag for DB-only cars
+      }));
+
+      const allCars = [...mergedCars, ...dbOnlyCars];
+      console.log("Merged cars:", allCars);
+      setCars(allCars);
     } catch (error) {
       console.error("Error loading cars:", error);
       showNotification("Error loading cars: " + error.message, "error");
@@ -224,6 +260,7 @@ function App() {
       setLoading(false);
     }
   };
+
 
   const listCar = async () => {
     if (!contract) {
