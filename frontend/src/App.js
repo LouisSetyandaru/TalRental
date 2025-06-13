@@ -32,7 +32,7 @@ const ApiService = {
       const data = await response.json();
       return data.map(car => ({
         ...car,
-        carId: car.id || car._id, // Handle both id and _id
+        carId: car.id || car._id,
         pricePerDay: car.pricePerDay.toString(),
         depositAmount: car.depositAmount.toString()
       }));
@@ -40,6 +40,79 @@ const ApiService = {
       console.error("API Error:", error);
       throw error;
     }
+  },
+
+  async getRentedCars() {
+    try {
+      console.log('Fetching rented cars from /api/cars/rented...');
+      const response = await fetch("http://localhost:5050/api/cars/rented");
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      // In case your route returns an array directly
+      if (Array.isArray(data)) {
+        return data;
+      }
+
+      // If it's wrapped in a success object
+      if (data.success && Array.isArray(data.cars)) {
+        return data.cars;
+      }
+
+      console.warn('Unexpected response format from /rented:', data);
+      return [];
+    } catch (error) {
+      console.error("Error fetching rented cars:", error);
+      throw error;
+    }
+  },
+
+  async fullDeleteCar(carId, requesterAddress, privateKey) {
+    const response = await fetch(`http://localhost:5050/api/cars/${carId}/full-delete`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requesterAddress, privateKey })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to delete car");
+    }
+
+    return await response.json();
+  },
+
+  async cancelRental(carId, requesterAddress) {
+    const response = await fetch(`http://localhost:5050/api/cars/${carId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requesterAddress })
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to cancel rental");
+    }
+
+    return await response.json();
+  },
+
+  async completeRental(carId, requesterAddress) {
+    const response = await fetch(`http://localhost:5050/api/cars/${carId}/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requesterAddress })
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to complete rental");
+    }
+
+    return await response.json();
   },
 
   async createCar(carData) {
@@ -59,21 +132,51 @@ const ApiService = {
   },
 
   async bookCar(carId, bookingData) {
-    console.log('Booking car in database:', carId, bookingData);
-    // Mock implementation - replace with actual API call
-    return { success: true };
+    const response = await fetch(`http://localhost:5050/api/cars/${carId}/book`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(bookingData)
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to book car");
+    }
+
+    return await response.json();
   },
 
   async cancelBooking(carId, data) {
-    console.log('Cancelling booking in database:', carId, data);
-    // Mock implementation - replace with actual API call
-    return { success: true };
+    const response = await fetch(`http://localhost:5050/api/cars/${carId}/cancel`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to cancel booking");
+    }
+
+    return await response.json();
   },
 
   async completeRental(carId, data) {
-    console.log('Completing rental in database:', carId, data);
-    // Mock implementation - replace with actual API call
-    return { success: true };
+    const response = await fetch(`http://localhost:5050/api/cars/${carId}/complete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to complete rental");
+    }
+
+    return await response.json();
   }
 };
 
@@ -84,6 +187,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("browse");
   const [notification, setNotification] = useState({ message: "", type: "", show: false });
+  const [rentedCars, setRentedCars] = useState([]);
+  useEffect(() => {
+    console.log('rentedCars state changed:', rentedCars);
+    console.log('rentedCars length:', rentedCars.length);
+    console.log('rentedCars type:', typeof rentedCars);
+    console.log('rentedCars is array:', Array.isArray(rentedCars));
+  }, [rentedCars]);
 
   // Form states
   const [listCarForm, setListCarForm] = useState({
@@ -151,6 +261,67 @@ function App() {
     }
   };
 
+  const listCarFromDatabase = async (dbCar) => {
+    if (!contract || !account) {
+      showNotification("Contract not initialized or wallet not connected", "error");
+      return false;
+    }
+
+    try {
+      // Convert price and deposit to wei
+      const pricePerDayWei = ethers.parseEther(dbCar.pricePerDay.toString());
+      const depositAmountWei = ethers.parseEther(dbCar.depositAmount.toString());
+
+      // List car on blockchain
+      const tx = await contract.listCar(
+        pricePerDayWei,
+        depositAmountWei,
+        dbCar.metadataURI || `db-car-${dbCar._id}`
+      );
+
+      const receipt = await tx.wait();
+
+      // Get the new car ID from the blockchain
+      let carId;
+      const carListedEvent = receipt.logs.find(log => {
+        try {
+          const parsed = contract.interface.parseLog(log);
+          return parsed.name === 'CarListed';
+        } catch (e) {
+          return false;
+        }
+      });
+
+      if (carListedEvent) {
+        const parsed = contract.interface.parseLog(carListedEvent);
+        carId = parsed.args.carId.toString();
+      } else {
+        // Fallback: get from carCount
+        const count = await contract.carCount();
+        carId = count.toString();
+      }
+
+      // Update the database with the new blockchain ID
+      try {
+        await ApiService.updateCar(dbCar._id, {
+          carId: carId,
+          blockNumber: receipt.blockNumber,
+          transactionHash: tx.hash
+        });
+      } catch (error) {
+        console.error("Error updating car in database:", error);
+      }
+
+      showNotification(`Car ${dbCar.model} listed on blockchain!`, "success");
+      return true;
+    } catch (error) {
+      console.error("Error listing car from database:", error);
+      showNotification("Error listing car: " + error.message, "error");
+      return false;
+    }
+  };
+
+  // Replace your existing loadCars function with this updated version
   const loadCars = async () => {
     if (!contract) {
       console.log("Contract not initialized");
@@ -168,14 +339,11 @@ function App() {
         contract.carCount()
       ]);
 
-      console.log("DB Cars from API:", dbCars);
-      console.log("Blockchain Car Count:", carCount.toString());
-
       // Get blockchain data
       const blockchainCars = [];
       for (let i = 0; i < Number(carCount); i++) {
         try {
-          const car = await contract.cars(i + 1); // Car IDs start at 1
+          const car = await contract.cars(i + 1);
           blockchainCars.push({
             id: car.id.toString(),
             owner: car.owner,
@@ -189,19 +357,44 @@ function App() {
         }
       }
 
-      console.log("Blockchain cars:", blockchainCars);
+      // Find DB-only cars that need to be listed on blockchain
+      const dbOnlyCars = dbCars.filter(dbCar =>
+        !blockchainCars.some(bcCar =>
+          bcCar.id === dbCar.id ||
+          bcCar.id === dbCar._id ||
+          bcCar.id === dbCar.carId
+        )
+      );
 
-      // Merge data - prioritize blockchain data but enrich with DB data
+      // List DB-only cars on blockchain
+      if (dbOnlyCars.length > 0) {
+        showNotification(`Found ${dbOnlyCars.length} unlisted cars. Adding to blockchain...`, "info");
+
+        for (const dbCar of dbOnlyCars) {
+          try {
+            await listCarFromDatabase(dbCar);
+          } catch (error) {
+            console.error(`Failed to list car ${dbCar._id}:`, error);
+          }
+        }
+
+        // Reload cars after listing new ones
+        return loadCars();
+      }
+
+      // Merge data
       const mergedCars = blockchainCars.map(blockchainCar => {
-        // Find matching DB car (check both id and _id fields)
         const dbCar = dbCars.find(dbCar =>
           dbCar.id === blockchainCar.id ||
           dbCar._id === blockchainCar.id ||
           dbCar.carId === blockchainCar.id
         );
 
+        const isRented = dbCar?.rental?.isActive === true || dbCar?.isAvailable === false;
+
         return {
-          ...blockchainCar, // Blockchain data takes precedence
+          ...blockchainCar,
+          isAvailable: !isRented,
           // Database enrichment
           carBrand: dbCar?.carBrand || dbCar?.model?.split(' ')[0] || 'Unknown',
           carModel: dbCar?.carModel || dbCar?.model?.split(' ').slice(1).join(' ') || 'Unknown',
@@ -213,45 +406,15 @@ function App() {
           features: dbCar?.features || dbCar?.specs?.features || [],
           description: dbCar?.description || '',
           specs: dbCar?.specs || {},
+          rental: dbCar?.rental || null,
+          isAvailable: dbCar?.isAvailable,
           // Preserve DB IDs if they exist
           _id: dbCar?._id,
           dbId: dbCar?._id || dbCar?.id
         };
       });
 
-      // Add any DB cars that aren't in blockchain (for development/testing)
-      const dbOnlyCars = dbCars.filter(dbCar =>
-        !blockchainCars.some(bcCar =>
-          bcCar.id === dbCar.id ||
-          bcCar.id === dbCar._id ||
-          bcCar.id === dbCar.carId
-        )
-      ).map(dbCar => ({
-        id: dbCar.id || dbCar._id || dbCar.carId,
-        owner: dbCar.ownerAddress,
-        pricePerDay: dbCar.pricePerDay.toString(),
-        depositAmount: dbCar.depositAmount.toString(),
-        isAvailable: dbCar.isAvailable,
-        metadataURI: dbCar.metadataURI,
-        // Database fields
-        carBrand: dbCar.carBrand || dbCar.model?.split(' ')[0] || 'Unknown',
-        carModel: dbCar.carModel || dbCar.model?.split(' ').slice(1).join(' ') || 'Unknown',
-        carYear: dbCar.carYear || dbCar.year?.toString() || '',
-        carColor: dbCar.carColor || dbCar.specs?.color || '',
-        carType: dbCar.carType || dbCar.specs?.type || '',
-        carImage: dbCar.carImage || dbCar.imageURL || '',
-        location: dbCar.location || '',
-        features: dbCar.features || dbCar.specs?.features || [],
-        description: dbCar.description || '',
-        specs: dbCar.specs || {},
-        _id: dbCar._id,
-        dbId: dbCar._id || dbCar.id,
-        isDbOnly: true // Flag for DB-only cars
-      }));
-
-      const allCars = [...mergedCars, ...dbOnlyCars];
-      console.log("Merged cars:", allCars);
-      setCars(allCars);
+      setCars(mergedCars);
     } catch (error) {
       console.error("Error loading cars:", error);
       showNotification("Error loading cars: " + error.message, "error");
@@ -260,7 +423,6 @@ function App() {
       setLoading(false);
     }
   };
-
 
   const listCar = async () => {
     if (!contract) {
@@ -404,60 +566,101 @@ function App() {
     setLoading(false);
   };
 
-  const cancelBooking = async (carId) => {
-    if (!contract) return;
-
+  const loadRentedCars = async () => {
     setLoading(true);
     try {
-      // Cancel booking in smart contract
-      const tx = await contract.cancelBooking(carId);
-      const receipt = await tx.wait();
+      console.log('=== LOADING RENTED CARS ===');
 
-      // Update status in database
+      // Debug info first
       try {
-        await ApiService.cancelBooking(carId, {
-          transactionHash: tx.hash,
-          blockNumber: receipt.blockNumber
-        });
-      } catch (error) {
-        console.warn("Could not update database:", error);
+        const debugInfo = await ApiService.debugAllCars();
+        console.log('Debug info:', debugInfo);
+      } catch (debugError) {
+        console.warn('Could not fetch debug info:', debugError);
       }
 
-      showNotification("Booking cancelled successfully!", "success");
-      loadCars();
-    } catch (error) {
-      console.error("Error cancelling booking:", error);
-      showNotification("Error cancelling booking: " + error.message, "error");
-    }
-    setLoading(false);
-  };
+      // Fetch rented cars
+      const apiResponse = await ApiService.getRentedCars();
+      console.log('Raw API response:', apiResponse);
+      console.log('Type of response:', typeof apiResponse);
+      console.log('Is array:', Array.isArray(apiResponse));
 
-  const completeRental = async (carId) => {
-    if (!contract) return;
+      let carsArray = [];
 
-    setLoading(true);
-    try {
-      // Complete rental in smart contract
-      const tx = await contract.completeRental(carId);
-      const receipt = await tx.wait();
-
-      // Update status in database
-      try {
-        await ApiService.completeRental(carId, {
-          transactionHash: tx.hash,
-          blockNumber: receipt.blockNumber
-        });
-      } catch (error) {
-        console.warn("Could not update database:", error);
+      // Handle the different response formats
+      if (apiResponse && typeof apiResponse === 'object') {
+        if (apiResponse.success !== undefined) {
+          // New format with success flag
+          if (apiResponse.success) {
+            carsArray = apiResponse.cars || [];
+          } else {
+            throw new Error(apiResponse.details || apiResponse.error || 'API returned unsuccessful response');
+          }
+        } else if (Array.isArray(apiResponse)) {
+          // Direct array response
+          console.log('Direct array response');
+          carsArray = apiResponse;
+        } else if (apiResponse.data && Array.isArray(apiResponse.data)) {
+          // Response wrapped in data property
+          console.log('Response wrapped in data property');
+          carsArray = apiResponse.data;
+        } else {
+          // Try to find array property in the response
+          const possibleArrays = Object.values(apiResponse).filter(val => Array.isArray(val));
+          if (possibleArrays.length > 0) {
+            console.log('Found array in response properties');
+            carsArray = possibleArrays[0];
+          } else {
+            console.warn('No array found in response, treating as single item');
+            carsArray = [apiResponse];
+          }
+        }
+      } else if (Array.isArray(apiResponse)) {
+        carsArray = apiResponse;
+      } else {
+        throw new Error('Invalid response format from API');
       }
 
-      showNotification("Rental completed successfully!", "success");
-      loadCars();
+      console.log('Processed cars array:', carsArray);
+      console.log('Cars array length:', carsArray.length);
+      console.log('Cars array type:', typeof carsArray);
+
+      // Ensure it's an array
+      if (!Array.isArray(carsArray)) {
+        console.error('Expected array but got:', typeof carsArray, carsArray);
+        throw new Error('Expected array but received ' + typeof carsArray);
+      }
+
+      // Transform the data to ensure consistency
+      const transformedCars = carsArray.map(car => ({
+        ...car,
+        id: car.carId || car._id || car.id,
+        carId: car.carId || car._id || car.id,
+        owner: car.owner || car.ownerAddress || "",
+        isAvailable: false,
+        pricePerDay: car.pricePerDay?.toString() || '0',
+        depositAmount: car.depositAmount?.toString() || '0'
+      }));
+
+      console.log('Transformed cars:', transformedCars);
+      console.log('About to set state with', transformedCars.length, 'cars');
+
+      // Set the state
+      setRentedCars(transformedCars);
+
+      // Verify state was set (this will show in next render)
+      console.log('State should be updated with', transformedCars.length, 'cars');
+
+      showNotification(`Loaded ${transformedCars.length} rented cars`, "success");
+
     } catch (error) {
-      console.error("Error completing rental:", error);
-      showNotification("Error completing rental: " + error.message, "error");
+      console.error("Error loading rented cars:", error);
+      console.error("Error stack:", error.stack);
+      showNotification("Error loading rented cars: " + error.message, "error");
+      setRentedCars([]); // Set empty array on error
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const CarCard = ({ car, onRefresh }) => {
@@ -477,8 +680,8 @@ function App() {
     });
     const [currentRental, setCurrentRental] = useState(null);
 
-    const isOwner = car.owner.toLowerCase() === account?.toLowerCase();
-    const isRentedByMe = currentRental?.renter.toLowerCase() === account?.toLowerCase();
+    const isOwner = (car.owner || car.ownerAddress || "").toLowerCase() === (account || "").toLowerCase();
+    const isRentedByMe = (currentRental?.renter || "").toLowerCase() === (account || "").toLowerCase();
 
     // Load rental info when component mounts
     useEffect(() => {
@@ -571,21 +774,24 @@ function App() {
       setLoading(false);
     };
 
+    // In the CarCard component, update the return logic
     const handleReturnCar = async () => {
       if (!contract) return;
 
       setLoading(true);
       try {
+        // Complete rental in smart contract
         const tx = await contract.completeRental(car.id);
-        await tx.wait();
+        const receipt = await tx.wait();
 
-        // Save return info to database
+        // Update status in database
         await ApiService.completeRental(car.id, {
           returnedBy: account,
           returnCondition: returnData.condition,
           returnNotes: returnData.notes,
           fuelLevel: returnData.fuelLevel,
-          transactionHash: tx.hash
+          transactionHash: tx.hash,
+          blockNumber: receipt.blockNumber
         });
 
         showNotification("Car returned successfully!", "success");
@@ -598,6 +804,70 @@ function App() {
       setLoading(false);
     };
 
+    const handleCancelBooking = async () => {
+      if (!contract) return;
+
+      setLoading(true);
+      try {
+        const tx = await contract.cancelBooking(car.id);
+        const receipt = await tx.wait();
+
+        await ApiService.cancelBooking(car.id, {
+          cancelledBy: account,
+          transactionHash: tx.hash,
+          blockNumber: receipt.blockNumber
+        });
+
+        showNotification("Booking cancelled successfully!", "success");
+        onRefresh();
+      } catch (error) {
+        console.error("Error cancelling booking:", error);
+        showNotification(`Error cancelling booking: ${error.message}`, "error");
+      }
+      setLoading(false);
+    };
+
+    const handleCompleteRental = async () => {
+      if (!contract) return;
+
+      setLoading(true);
+      try {
+        const tx = await contract.completeRental(car.id);
+        const receipt = await tx.wait();
+
+        await ApiService.completeRental(car.id, {
+          transactionHash: tx.hash,
+          blockNumber: receipt.blockNumber
+        });
+
+        showNotification("Rental completed successfully!", "success");
+        onRefresh();
+      } catch (error) {
+        console.error("Error completing rental:", error);
+        showNotification(`Error completing rental: ${error.message}`, "error");
+      }
+      setLoading(false);
+    };
+
+    const handleFullDeleteCar = async () => {
+      const confirmed = window.confirm("Are you sure you want to delete this car from the blockchain and database?");
+      if (!confirmed) return;
+
+      const privateKey = prompt("Enter your private key (only for demo/dev purpose):");
+      if (!privateKey) return;
+
+      setLoading(true);
+      try {
+        const result = await ApiService.fullDeleteCar(car.id, account, privateKey);
+        showNotification("Car deleted from blockchain & database", "success");
+        onRefresh();
+      } catch (error) {
+        showNotification(`Delete failed: ${error.message}`, "error");
+      }
+      setLoading(false);
+    };
+
+
     return (
       <div>
         <div className="car-card">
@@ -605,7 +875,14 @@ function App() {
           <div className="car-card-header">
             {car.carImage && (
               <div className="car-image">
-                <img src={car.carImage} alt={`${car.carBrand} ${car.carModel}`} />
+                <img
+                  src={
+                    car.imageURL?.startsWith("http")
+                      ? car.imageURL
+                      : "https://via.placeholder.com/300x200?text=No+Image"
+                  }
+                  alt="Car image"
+                />
               </div>
             )}
 
@@ -657,6 +934,50 @@ function App() {
                   className="btn btn-primary"
                 >
                   {showBookingForm ? 'Close Booking' : 'Book Now'}
+                </button>
+              )}
+
+              {
+                isOwner && (
+                  <div className="owner-actions">
+                    {!car.isAvailable && (
+                      <>
+                        <button
+                          onClick={() => ApiService.cancelRental(car.id, account).then(onRefresh)}
+                          disabled={loading}
+                          className="btn btn-warning btn-sm"
+                        >
+                          Cancel Rental
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const result = await ApiService.completeRental(car.id, account);
+                              showNotification(result.message || "Rental completed", "success");
+                              onRefresh();
+                            } catch (error) {
+                              showNotification(error.message || "Failed to complete rental", "error");
+                              showNotification("Failed to complete rental because the rental period hasn't ended yet", "error");
+                            }
+                          }}
+                          disabled={loading}
+                          className="btn btn-success btn-sm"
+                        >
+                          Complete Rental
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )
+              }
+
+              {isOwner && car.isAvailable && (
+                <button
+                  onClick={handleFullDeleteCar}
+                  className="btn btn-warning btn-sm"
+                  disabled={loading}
+                >
+                  Delete Car
                 </button>
               )}
             </div>
@@ -842,6 +1163,12 @@ function App() {
     );
   };
 
+  useEffect(() => {
+    if (activeTab === "rented") {
+      loadRentedCars();
+    }
+  }, [activeTab]);
+
   return (
     <div className="app">
       {/* Notification */}
@@ -887,6 +1214,12 @@ function App() {
               Browse Cars
             </button>
             <button
+              onClick={() => setActiveTab("rented")}
+              className={`nav-tab ${activeTab === "rented" ? "active" : ""}`}
+            >
+              Rented Cars
+            </button>
+            <button
               onClick={() => setActiveTab("list")}
               className={`nav-tab ${activeTab === "list" ? "active" : ""}`}
             >
@@ -909,13 +1242,56 @@ function App() {
 
               {loading ? (
                 <div className="loading">Loading cars...</div>
-              ) : cars.length === 0 ? (
+              ) : cars.filter(car => car.isAvailable).length === 0 ? (
                 <div className="empty-state">No cars available</div>
               ) : (
                 <div className="cars-grid">
-                  {cars.map((car) => (
-                    <CarCard key={car.id} car={car} />
+                  {cars.filter(car => car.isAvailable).map((car) => (
+                    <CarCard key={car.id} car={car} onRefresh={loadCars} />
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "rented" && (
+            <div className="rented-section">
+              <div className="section-header">
+                <h2 className="section-title">Rented Cars</h2>
+                <button
+                  onClick={loadRentedCars}
+                  disabled={loading}
+                  className="btn btn-secondary"
+                >
+                  {loading ? "Loading..." : "Refresh"}
+                </button>
+              </div>
+
+              {loading ? (
+                <div className="loading">Loading rented cars...</div>
+              ) : rentedCars.length === 0 ? (
+                <div className="empty-state">No cars currently rented</div>
+              ) : (
+                <div className="cars-grid">
+                  {rentedCars.map((car) => {
+                    // Transform the rented car data to match expected format
+                    const transformedCar = {
+                      ...car,
+                      id: car.carId || car._id,
+                      carId: car.carId || car._id,
+                      isAvailable: false, // rented cars are not available
+                      pricePerDay: car.pricePerDay?.toString() || '0',
+                      depositAmount: car.depositAmount?.toString() || '0'
+                    };
+
+                    return (
+                      <CarCard
+                        key={car.carId || car._id}
+                        car={transformedCar}
+                        onRefresh={loadRentedCars}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>

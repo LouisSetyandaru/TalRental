@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const Car = require('./models/Cars');
 
 // Load environment variables
 dotenv.config();
@@ -77,6 +78,90 @@ app.get('/api/test-db', async (req, res) => {
       error: error.message,
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+// Cancel booking endpoint
+app.post('/api/cars/:carId/cancel', async (req, res) => {
+  try {
+    const { carId } = req.params;
+    const { transactionHash, blockNumber, cancelledBy } = req.body;
+
+    // Update car availability and add cancellation info
+    const updatedCar = await Car.findOneAndUpdate(
+      { carId: carId },
+      {
+        $set: {
+          isAvailable: true,
+          'rental.isActive': false,
+          'rental.cancelledAt': new Date(),
+          'rental.cancelledBy': cancelledBy,
+          'rental.cancellationTxHash': transactionHash,
+          'rental.cancellationBlockNumber': blockNumber
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedCar) {
+      return res.status(404).json({ error: 'Car not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Booking cancelled successfully',
+      car: updatedCar
+    });
+  } catch (error) {
+    console.error('Error cancelling booking:', error);
+    res.status(500).json({ error: 'Failed to cancel booking' });
+  }
+});
+
+// Complete rental endpoint
+app.post('/api/cars/:carId/complete', async (req, res) => {
+  try {
+    const { carId } = req.params;
+    const {
+      transactionHash,
+      blockNumber,
+      returnedBy,
+      returnCondition,
+      returnNotes,
+      fuelLevel
+    } = req.body;
+
+    // Update car availability and add completion info
+    const updatedCar = await Car.findOneAndUpdate(
+      { carId: carId },
+      {
+        $set: {
+          isAvailable: true,
+          'rental.isActive': false,
+          'rental.completedAt': new Date(),
+          'rental.returnedBy': returnedBy,
+          'rental.returnCondition': returnCondition,
+          'rental.returnNotes': returnNotes,
+          'rental.fuelLevel': fuelLevel,
+          'rental.completionTxHash': transactionHash,
+          'rental.completionBlockNumber': blockNumber
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedCar) {
+      return res.status(404).json({ error: 'Car not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Rental completed successfully',
+      car: updatedCar
+    });
+  } catch (error) {
+    console.error('Error completing rental:', error);
+    res.status(500).json({ error: 'Failed to complete rental' });
   }
 });
 
